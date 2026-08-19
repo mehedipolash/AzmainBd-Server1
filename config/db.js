@@ -1,4 +1,4 @@
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, GridFSBucket } = require("mongodb");
 const { dbUser, dbPass, dbName } = require("./env");
 
 // Credentials are URL-encoded — a password containing @ or / silently corrupts
@@ -17,6 +17,7 @@ const client = new MongoClient(uri, {
 });
 
 let collections = null;
+let imageBucket = null;
 
 const connectDb = async () => {
   await client.connect();
@@ -24,12 +25,19 @@ const connectDb = async () => {
 
   const db = client.db(dbName);
 
+  // Product photos live in GridFS rather than as base64 inside the product
+  // document. A 16MB BSON cap would otherwise be shared between the image and
+  // every other field, and every product query would drag the image bytes
+  // along even when only the name and price are needed.
+  imageBucket = new GridFSBucket(db, { bucketName: "productImages" });
+
   collections = {
     products: db.collection("products"),
     categories: db.collection("categories"),
     users: db.collection("users"),
     orders: db.collection("orders"),
     banners: db.collection("banners"),
+    sales: db.collection("sales"),
   };
 
   // Indexes enforce uniqueness at the database level, so a race between two
@@ -40,12 +48,21 @@ const connectDb = async () => {
     collections.categories.createIndex({ slug: 1 }, { unique: true }),
     collections.products.createIndex({ category: 1 }),
     collections.products.createIndex({ createdAt: -1 }),
+    collections.sales.createIndex({ soldAt: -1 }),
+    collections.sales.createIndex({ productId: 1 }),
     // Text index powers search without a full collection scan.
     collections.products.createIndex({ name: "text", description: "text", brand: "text" }),
   ]);
 
   console.log(`Connected to MongoDB (database: ${dbName})`);
   return collections;
+};
+
+const getImageBucket = () => {
+  if (!imageBucket) {
+    throw new Error("Database not connected — call connectDb() first");
+  }
+  return imageBucket;
 };
 
 const getCollections = () => {
@@ -57,4 +74,4 @@ const getCollections = () => {
 
 const closeDb = () => client.close();
 
-module.exports = { connectDb, getCollections, closeDb, client };
+module.exports = { connectDb, getCollections, getImageBucket, closeDb, client };

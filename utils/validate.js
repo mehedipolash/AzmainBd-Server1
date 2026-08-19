@@ -84,11 +84,20 @@ const asStringArray = (value, field, { maxItems = 20, maxLength = 60 } = {}) => 
     .filter(Boolean);
 };
 
-// Only permit image URLs we are willing to render. Blocking javascript: and
-// data: here stops a stored-XSS vector via the product image field.
+// Only permit image references we are willing to render. Blocking javascript:
+// and data: here stops a stored-XSS vector via the product image field.
+//
+// Two shapes are accepted: an absolute http(s) URL, and the relative path our
+// own upload endpoint hands back (/api/images/<id>). The relative form is
+// stored verbatim so the same database serves correctly from localhost and
+// from the deployed domain without a rewrite.
+const UPLOADED_IMAGE_PATH = /^\/api\/images\/[a-f0-9]{24}$/i;
+
 const asImageUrl = (value, field, { required = true } = {}) => {
   const raw = asString(value, field, { required, max: 1000 });
   if (!raw) return "";
+
+  if (UPLOADED_IMAGE_PATH.test(raw)) return raw;
 
   let parsed;
   try {
@@ -102,6 +111,45 @@ const asImageUrl = (value, field, { required = true } = {}) => {
   }
 
   return parsed.toString();
+};
+
+// Free-form key/value rows the shop owner adds per product — "Volume: 500ml",
+// "Origin: Malaysia". Bounded in count and length like everything else, and
+// keys are cleaned so they can never collide with a real document field or
+// carry a Mongo operator.
+const MAX_CUSTOM_FIELDS = 20;
+
+const asCustomFields = (value, field) => {
+  if (value === undefined || value === null) return [];
+
+  if (!Array.isArray(value)) {
+    throw new ValidationError(`${field} must be a list`, field);
+  }
+
+  if (value.length > MAX_CUSTOM_FIELDS) {
+    throw new ValidationError(
+      `${field} can hold at most ${MAX_CUSTOM_FIELDS} entries`,
+      field,
+    );
+  }
+
+  return value
+    .filter((row) => row && typeof row === "object" && !Array.isArray(row))
+    .map((row) => ({
+      // Not required: a half-filled row is dropped by the filter below rather
+      // than failing the whole save. The admin form always renders one blank
+      // row for the next entry, so blanks are the normal case, not an error.
+      //
+      // Leading $ and dots are stripped rather than rejected: these are labels
+      // typed by a shop owner, not identifiers, so silently cleaning them is
+      // friendlier than an error about characters they did not mean to type.
+      label: asString(row.label, `${field} label`, { required: false, max: 60 }).replace(
+        /^[$]+|[.]/g,
+        "",
+      ),
+      value: asString(row.value, `${field} value`, { required: false, max: 200 }),
+    }))
+    .filter((row) => row.label && row.value);
 };
 
 const slugify = (value) =>
@@ -129,13 +177,20 @@ const buildProduct = (body, { partial = false } = {}) => {
   if (need || body.image !== undefined) {
     doc.image = asImageUrl(body.image, "image", { required: need });
   }
+  // Price is optional. A null price means "price on request" — the storefront
+  // shows a WhatsApp button instead of an amount, which is how the client
+  // actually sells the items they have not fixed a price for yet.
   if (need || body.price !== undefined) {
-    doc.price = asInteger(body.price, "price", { min: 1, max: MAX_PRICE, required: need });
+    if (body.price === null || body.price === "") {
+      doc.price = null;
+    } else {
+      doc.price = asInteger(body.price, "price", { min: 1, max: MAX_PRICE, required: false });
+    }
   }
   if (body.oldPrice !== undefined && body.oldPrice !== null && body.oldPrice !== "") {
     doc.oldPrice = asInteger(body.oldPrice, "oldPrice", { min: 1, max: MAX_PRICE });
 
-    if (doc.price !== undefined && doc.oldPrice <= doc.price) {
+    if (doc.price !== undefined && doc.price !== null && doc.oldPrice <= doc.price) {
       throw new ValidationError("oldPrice must be higher than price", "oldPrice");
     }
   } else if (body.oldPrice === null || body.oldPrice === "") {
@@ -145,6 +200,15 @@ const buildProduct = (body, { partial = false } = {}) => {
     doc.stock = asInteger(body.stock, "stock", { min: 0, max: MAX_STOCK, required: need });
   }
   if (body.specs !== undefined) doc.specs = asStringArray(body.specs, "specs");
+
+  // Variants are simple labels ("500ml", "Charcoal Lavender"). Ordering
+  // happens over WhatsApp, so they describe the option rather than driving a
+  // separate priced SKU.
+  if (body.variants !== undefined) doc.variants = asStringArray(body.variants, "variants");
+
+  if (body.customFields !== undefined) {
+    doc.customFields = asCustomFields(body.customFields, "customFields");
+  }
 
   if (Object.keys(doc).length === 0) {
     throw new ValidationError("No valid fields supplied", null);
@@ -181,6 +245,7 @@ module.exports = {
   asInteger,
   asStringArray,
   asImageUrl,
+  asCustomFields,
   slugify,
   buildProduct,
   buildCategory,

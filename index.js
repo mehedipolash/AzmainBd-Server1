@@ -10,6 +10,8 @@ const { ValidationError } = require("./utils/validate");
 const productRoutes = require("./routes/products.routes");
 const categoryRoutes = require("./routes/categories.routes");
 const userRoutes = require("./routes/users.routes");
+const imageRoutes = require("./routes/images.routes");
+const salesRoutes = require("./routes/sales.routes");
 
 const app = express();
 
@@ -17,7 +19,10 @@ const app = express();
 // deployed behind Render/Vercel rather than on the proxy's address.
 app.set("trust proxy", 1);
 
-app.use(helmet());
+// crossOriginResourcePolicy is relaxed to "cross-origin" so the storefront can
+// display product photos served from this API. Everything else helmet sets —
+// nosniff, frameguard, HSTS — stays on.
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
 // Explicit origin allowlist. A bare cors() reflects any origin, which lets any
 // website on the internet call this API from a logged-in customer's browser.
@@ -56,7 +61,7 @@ const writeLimiter = rateLimit({
   message: { error: "Too many changes in a short time — please wait a moment" },
 });
 
-app.use(["/api/products", "/api/categories"], (req, res, next) => {
+app.use(["/api/products", "/api/categories", "/api/images", "/api/sales"], (req, res, next) => {
   if (req.method === "GET") return next();
   return writeLimiter(req, res, next);
 });
@@ -72,6 +77,8 @@ app.get("/health", async (req, res) => {
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/images", imageRoutes);
+app.use("/api/sales", salesRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
@@ -83,6 +90,11 @@ app.use((req, res) => {
 app.use((error, req, res, _next) => {
   if (error instanceof ValidationError) {
     return res.status(400).json({ error: error.message, field: error.field });
+  }
+
+  // multer raises this when a file exceeds the configured limit.
+  if (error?.code === "LIMIT_FILE_SIZE") {
+    return res.status(400).json({ error: "Image must be 5MB or smaller", field: "image" });
   }
 
   if (error?.message === "Origin not allowed by CORS") {
