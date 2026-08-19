@@ -93,11 +93,16 @@ const asStringArray = (value, field, { maxItems = 20, maxLength = 60 } = {}) => 
 // from the deployed domain without a rewrite.
 const UPLOADED_IMAGE_PATH = /^\/api\/images\/[a-f0-9]{24}$/i;
 
+// The client's own product photography, served as a static asset by the
+// frontend. Restricted to a flat filename under /products/ so the pattern can
+// never express a traversal or reach another path on the origin.
+const STATIC_PHOTO_PATH = /^\/products\/[a-z0-9][a-z0-9-]{0,99}\.(jpg|jpeg|png|webp)$/i;
+
 const asImageUrl = (value, field, { required = true } = {}) => {
   const raw = asString(value, field, { required, max: 1000 });
   if (!raw) return "";
 
-  if (UPLOADED_IMAGE_PATH.test(raw)) return raw;
+  if (UPLOADED_IMAGE_PATH.test(raw) || STATIC_PHOTO_PATH.test(raw)) return raw;
 
   let parsed;
   try {
