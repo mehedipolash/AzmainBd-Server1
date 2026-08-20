@@ -27,6 +27,7 @@ const CATEGORIES = [
   { name: "Skin Care", slug: "skin-care", image: PHOTO("chinese-herbal-facial-mask-cream") },
   { name: "Herbal Soap", slug: "herbal-soap", image: PHOTO("vica-premium-herbal-soap") },
   { name: "Oral Care", slug: "oral-care", image: PHOTO("sensodyne-whitening-toothpaste-4-pack") },
+  { name: "Bangles", slug: "bangles", image: PHOTO("glass-bangles-grand-assortment") },
 ];
 
 /* `price: null` means the client has not set a price yet, which the
@@ -293,6 +294,115 @@ const PRODUCTS = [
     variants: [],
     customFields: [
       { label: "Product Type", value: "Hair Care / Shampoo" },
+    ],
+  },
+
+  /* ------------------------------- bangles -------------------------------
+     Glass bangles, sold by the full packet at a flat 1,000 taka. Each entry
+     describes what is actually in the photographed packet — colour and
+     finish — because that is the only thing that distinguishes them to
+     someone choosing. Sizes are the standard Bangladeshi bangle sizes, and
+     are offered as variants so the customer states one when they message. */
+  {
+    name: "Golden Zari Glass Bangles — Full Packet",
+    category: "bangles",
+    brand: "Azmain BD",
+    price: 1000,
+    stock: 12,
+    description:
+      "A full packet of golden glass bangles finished with zari detailing. Six dozen bangles to a packet, in the classic gold that suits mehendi, holud and every wedding function. Sold only as a complete packet.",
+    image: PHOTO("glass-bangles-golden"),
+    specs: ["Full packet", "Glass", "Zari finish"],
+    variants: ["2.4", "2.6", "2.8"],
+    customFields: [
+      { label: "Product Type", value: "Bangles / Glass" },
+      { label: "Colour", value: "Golden" },
+      { label: "Sold As", value: "Full packet" },
+    ],
+  },
+  {
+    name: "Rose Pink Glass Bangles — Full Packet",
+    category: "bangles",
+    brand: "Azmain BD",
+    price: 1000,
+    stock: 10,
+    description:
+      "A full packet of rose pink glass bangles with fine gold glitter running through them. Soft enough for everyday wear and bright enough for a function. Sold only as a complete packet.",
+    image: PHOTO("glass-bangles-rose-pink"),
+    specs: ["Full packet", "Glass", "Glitter finish"],
+    variants: ["2.4", "2.6", "2.8"],
+    customFields: [
+      { label: "Product Type", value: "Bangles / Glass" },
+      { label: "Colour", value: "Rose pink" },
+      { label: "Sold As", value: "Full packet" },
+    ],
+  },
+  {
+    name: "Festive Mix Glass Bangles — Full Packet",
+    category: "bangles",
+    brand: "Azmain BD",
+    price: 1000,
+    stock: 8,
+    description:
+      "A full packet holding several colours at once — pink, magenta, gold, green and deep red — so one packet covers a whole set of outfits. Sold only as a complete packet.",
+    image: PHOTO("glass-bangles-festive-mix"),
+    specs: ["Full packet", "Glass", "Assorted colours"],
+    variants: ["2.4", "2.6", "2.8"],
+    customFields: [
+      { label: "Product Type", value: "Bangles / Glass" },
+      { label: "Colour", value: "Assorted" },
+      { label: "Sold As", value: "Full packet" },
+    ],
+  },
+  {
+    name: "Jewel Tone Glass Bangles — Full Packet",
+    category: "bangles",
+    brand: "Azmain BD",
+    price: 1000,
+    stock: 9,
+    description:
+      "A full packet in deep jewel tones — emerald, magenta, teal and mustard — each colour banded separately so they can be worn matched or stacked together. Sold only as a complete packet.",
+    image: PHOTO("glass-bangles-jewel-tones"),
+    specs: ["Full packet", "Glass", "Jewel tones"],
+    variants: ["2.4", "2.6", "2.8"],
+    customFields: [
+      { label: "Product Type", value: "Bangles / Glass" },
+      { label: "Colour", value: "Jewel tones" },
+      { label: "Sold As", value: "Full packet" },
+    ],
+  },
+  {
+    name: "Teal Zari Glass Bangles — Full Packet",
+    category: "bangles",
+    brand: "Azmain BD",
+    price: 1000,
+    stock: 7,
+    description:
+      "A full packet of teal glass bangles worked with gold zari and beadwork. The blue-green reads well against both light and dark fabric. Sold only as a complete packet.",
+    image: PHOTO("glass-bangles-teal-zari"),
+    specs: ["Full packet", "Glass", "Zari and beadwork"],
+    variants: ["2.4", "2.6", "2.8"],
+    customFields: [
+      { label: "Product Type", value: "Bangles / Glass" },
+      { label: "Colour", value: "Teal" },
+      { label: "Sold As", value: "Full packet" },
+    ],
+  },
+  {
+    name: "Grand Assortment Glass Bangles — Full Packet",
+    category: "bangles",
+    brand: "Azmain BD",
+    price: 1000,
+    stock: 6,
+    description:
+      "The largest assortment we carry — a full packet running through red, gold, green, orange and more, banded by colour. Suits a family buying for several people at once. Sold only as a complete packet.",
+    image: PHOTO("glass-bangles-grand-assortment"),
+    specs: ["Full packet", "Glass", "Large assortment"],
+    variants: ["2.4", "2.6", "2.8"],
+    customFields: [
+      { label: "Product Type", value: "Bangles / Glass" },
+      { label: "Colour", value: "Multi-colour" },
+      { label: "Sold As", value: "Full packet" },
     ],
   },
 ];
