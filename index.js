@@ -97,6 +97,18 @@ app.use((error, req, res, _next) => {
     return res.status(400).json({ error: "Image must be 5MB or smaller", field: "image" });
   }
 
+  // body-parser raises these for a request body that is too large or is not
+  // valid JSON. Both are the CALLER's mistake, so they must answer 413/400
+  // rather than falling through to the generic 500 — a 500 says the server
+  // broke, which invites a probe to keep pushing to see what else breaks.
+  if (error?.type === "entity.too.large") {
+    return res.status(413).json({ error: "Request body is too large" });
+  }
+
+  if (error?.type === "entity.parse.failed" || error instanceof SyntaxError) {
+    return res.status(400).json({ error: "Request body is not valid JSON" });
+  }
+
   if (error?.message === "Origin not allowed by CORS") {
     return res.status(403).json({ error: "Origin not allowed" });
   }
