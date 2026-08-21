@@ -39,6 +39,13 @@ router.get("/", async (req, res, next) => {
       filter.stock = { $gt: 0 };
     }
 
+    // Hero carousel selection. Compared against true explicitly rather than
+    // testing for existence, so products saved before this field existed are
+    // treated as not-featured instead of matching a { $exists: false } probe.
+    if (req.query.featured === "true") {
+      filter.featured = true;
+    }
+
     // Regex is escaped — an unescaped user string here is a ReDoS vector and
     // lets a visitor craft queries the index cannot serve.
     if (req.query.search) {

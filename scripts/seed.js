@@ -420,8 +420,25 @@ const seed = async () => {
 
   const now = Date.now();
 
+  // The client picked the five Chinese Herbal items for the homepage hero —
+  // their own-import range, which is what they want visitors to see first.
+  //
+  // Matched by name rather than derived from `price === null`, even though the
+  // two sets happen to coincide today. Deriving it would silently drop a
+  // product out of the hero the moment the client set its price, which is the
+  // exact coupling the `featured` flag exists to break: what is advertised is
+  // a merchandising decision, not a consequence of pricing.
+  const HERO = new Set([
+    "Chinese Herbal Hair Nourishing Liquid",
+    "Chinese Herbal Facial Mask Cream",
+    "Chinese Herbal Shower Gel",
+    "Chinese Herbal Shampoo – Green",
+    "Chinese Herbal Shampoo – Red",
+  ]);
+
   const docs = PRODUCTS.map((product, index) => ({
     ...product,
+    featured: HERO.has(product.name),
     oldPrice: null,
     rating: 0,
     reviews: 0,
@@ -436,9 +453,19 @@ const seed = async () => {
 
   const priced = docs.filter((doc) => doc.price !== null).length;
   const lowStock = docs.filter((doc) => doc.stock > 0 && doc.stock <= 6).length;
+  const featured = docs.filter((doc) => doc.featured).length;
+
+  // Fails loudly rather than seeding a half-empty hero: a typo in a HERO name
+  // would otherwise show up as a quietly short carousel on the live homepage.
+  if (featured !== HERO.size) {
+    throw new Error(
+      `Hero selection mismatch: matched ${featured} of ${HERO.size} named products`,
+    );
+  }
 
   console.log(`Seeded ${CATEGORIES.length} categories and ${docs.length} products`);
   console.log(`  ${priced} priced, ${docs.length - priced} price-on-request, ${lowStock} low stock`);
+  console.log(`  ${featured} featured in the homepage hero`);
   console.log("  users and sales collections were not touched");
 
   await closeDb();

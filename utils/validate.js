@@ -68,6 +68,22 @@ const asInteger = (value, field, { min = 0, max = Number.MAX_SAFE_INTEGER, requi
   return parsed;
 };
 
+// Checkbox-style flags. Accepts the JSON booleans a fetch() sends and the
+// "true"/"false" strings a form field produces, so the same validator serves
+// both without the caller having to normalise first.
+const asBoolean = (value, field, { required = true } = {}) => {
+  if (value === undefined || value === null || value === "") {
+    if (required) throw new ValidationError(`${field} is required`, field);
+    return false;
+  }
+
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+
+  throw new ValidationError(`${field} must be true or false`, field);
+};
+
 const asStringArray = (value, field, { maxItems = 20, maxLength = 60 } = {}) => {
   if (value === undefined || value === null) return [];
 
@@ -204,6 +220,14 @@ const buildProduct = (body, { partial = false } = {}) => {
   if (need || body.stock !== undefined) {
     doc.stock = asInteger(body.stock, "stock", { min: 0, max: MAX_STOCK, required: need });
   }
+  // Whether this product appears in the homepage hero carousel. A stored flag
+  // rather than a rule the storefront infers, because "which products do we
+  // advertise" is a merchandising decision the shop owner makes and changes —
+  // not something that can be derived from price or stock.
+  if (need || body.featured !== undefined) {
+    doc.featured = asBoolean(body.featured, "featured", { required: false });
+  }
+
   if (body.specs !== undefined) doc.specs = asStringArray(body.specs, "specs");
 
   // Variants are simple labels ("500ml", "Charcoal Lavender"). Ordering
@@ -248,6 +272,7 @@ module.exports = {
   ValidationError,
   asString,
   asInteger,
+  asBoolean,
   asStringArray,
   asImageUrl,
   asCustomFields,
