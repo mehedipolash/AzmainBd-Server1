@@ -19,6 +19,20 @@ const app = express();
 // deployed behind Render/Vercel rather than on the proxy's address.
 app.set("trust proxy", 1);
 
+// Query strings parse to flat strings only.
+//
+// The "extended" parser turns ?category[$ne]=x into a nested OBJECT, and an
+// object reaching a Mongo filter is a query-operator injection: $ne, $gt and
+// $regex would be evaluated as operators rather than compared as text. Express
+// 5 already defaults to "simple", so this is the behaviour we have — but it is
+// a default, and defaults get changed by an upgrade or a stray config line.
+// Pinning it makes the guarantee explicit instead of incidental.
+//
+// Routes still coerce with String() on top of this; neither layer is relied on
+// alone. Nothing in this API takes a nested query parameter, so there is no
+// functionality to lose.
+app.set("query parser", "simple");
+
 // crossOriginResourcePolicy is relaxed to "cross-origin" so the storefront can
 // display product photos served from this API. Everything else helmet sets —
 // nosniff, frameguard, HSTS — stays on.

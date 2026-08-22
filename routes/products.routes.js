@@ -9,6 +9,25 @@ const router = express.Router();
 
 const MAX_LIMIT = 60;
 
+// A product references its category by slug, and the shop filters on an exact
+// slug match. So a product saved with a slug no category owns is invisible in
+// the category filter even though it is in the database — it can only be found
+// by scrolling the full grid. Checking at the point of write keeps that class
+// of orphan out entirely, instead of leaving it to be noticed months later.
+const assertCategoryExists = async (slug) => {
+  if (slug === undefined) return;
+
+  const { categories } = getCollections();
+  const found = await categories.findOne({ slug }, { projection: { _id: 1 } });
+
+  if (!found) {
+    throw new ValidationError(
+      `No category with the slug "${slug}". Create the category first.`,
+      "category",
+    );
+  }
+};
+
 // Rejects malformed ids before they reach Mongo, so a bad id returns 400 rather
 // than throwing a BSONError that would surface as a 500.
 const toObjectId = (id) => {
@@ -102,9 +121,12 @@ router.post("/", requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const { products } = getCollections();
 
+    const fields = buildProduct(req.body);
+    await assertCategoryExists(fields.category);
+
     // Server owns these fields; anything the client sent for them is discarded.
     const doc = {
-      ...buildProduct(req.body),
+      ...fields,
       rating: 0,
       reviews: 0,
       soldCount: 0,
@@ -127,6 +149,7 @@ router.patch("/:id", requireAuth, requireAdmin, async (req, res, next) => {
     const _id = toObjectId(req.params.id);
 
     const updates = buildProduct(req.body, { partial: true });
+    await assertCategoryExists(updates.category);
 
     // Validate the price relationship against stored values when only one side
     // is being changed, otherwise a partial update can leave oldPrice <= price.

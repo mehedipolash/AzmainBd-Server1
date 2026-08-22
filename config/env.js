@@ -36,9 +36,61 @@ const adminEmails = (process.env.ADMIN_EMAILS ?? "")
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
 
+const isProduction = process.env.NODE_ENV === "production";
+
+/* ---------------------------------------------------------------------------
+   Production sanity checks.
+
+   These are the settings that are harmless in development and dangerous in
+   production, and every one of them fails SILENTLY — the server boots, serves
+   requests, and looks healthy while being wide open or unreachable. A deploy
+   that is broken in a visible way gets fixed in minutes; one that is broken
+   quietly ships to the client.
+
+   Only enforced when NODE_ENV=production, so local development is untouched.
+--------------------------------------------------------------------------- */
+if (isProduction) {
+  const problems = [];
+
+  // A production API whose only allowed origin is localhost refuses every real
+  // browser request. The symptom is a storefront that loads but shows no
+  // products, with the reason buried in the browser console as a CORS error.
+  const localOnly = allowedOrigins.every((origin) => /^https?:\/\/localhost(:\d+)?$/i.test(origin));
+  if (allowedOrigins.length === 0 || localOnly) {
+    problems.push(
+      "ALLOWED_ORIGINS contains no deployed domain. Set it to the storefront's real URL.",
+    );
+  }
+
+  // http:// in production means tokens travel in clear text over the network.
+  const insecure = allowedOrigins.filter((origin) => origin.startsWith("http://") && !/localhost/i.test(origin));
+  if (insecure.length > 0) {
+    problems.push(`ALLOWED_ORIGINS uses plain http for: ${insecure.join(", ")}. Use https.`);
+  }
+
+  // ADMIN_EMAILS grants the admin role to whoever signs in with a listed
+  // address. Every entry is therefore a standing key to the panel, and one left
+  // behind from testing is the most likely way an unintended admin appears.
+  if (adminEmails.length === 0) {
+    problems.push("ADMIN_EMAILS is empty — no way to create the first admin.");
+  }
+  if (adminEmails.length > 3) {
+    problems.push(
+      `ADMIN_EMAILS lists ${adminEmails.length} addresses. Each one can become an admin by signing in — keep it to the accounts that genuinely need it.`,
+    );
+  }
+
+  if (problems.length > 0) {
+    console.error("\nRefusing to start in production with these problems:\n");
+    problems.forEach((problem) => console.error(`  - ${problem}`));
+    console.error("");
+    process.exit(1);
+  }
+}
+
 module.exports = {
   port: Number(process.env.PORT) || 5000,
-  isProduction: process.env.NODE_ENV === "production",
+  isProduction,
   dbUser: process.env.DB_USER,
   dbPass: process.env.DB_PASS,
   dbName: process.env.DB_NAME ?? "AzmainBd",

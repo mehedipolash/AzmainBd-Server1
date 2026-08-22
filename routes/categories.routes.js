@@ -58,13 +58,45 @@ router.post("/", requireAuth, requireAdmin, async (req, res, next) => {
 });
 
 // PATCH /api/categories/:id
+//
+// Renaming a category regenerates its slug, and products reference a category
+// BY SLUG. So a rename that only touches this collection silently orphans every
+// product in it: they keep pointing at a slug nothing resolves any more, and
+// they vanish from the shop's category filter while still sitting in the
+// database. That is exactly how "Bangles" -> "Glass Bangles" hid six products.
+//
+// The products are therefore carried across in the same request. This is not a
+// transaction — a single-node dev cluster cannot start one — so the products
+// are moved FIRST. If that write fails, the category keeps its old slug and the
+// data is still consistent; the reverse order could leave products stranded.
 router.patch("/:id", requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const { categories } = getCollections();
+    const { categories, products } = getCollections();
+    const _id = toObjectId(req.params.id);
+
     const updates = buildCategory(req.body, { partial: true });
 
+    const current = await categories.findOne({ _id });
+    if (!current) return res.status(404).json({ error: "Category not found" });
+
+    const slugChanged = updates.slug !== undefined && updates.slug !== current.slug;
+
+    if (slugChanged) {
+      // Refuse a rename that would collide with another category, rather than
+      // merging two categories' products together by accident.
+      const clash = await categories.findOne({ slug: updates.slug, _id: { $ne: _id } });
+      if (clash) {
+        return res.status(409).json({ error: "A category with that name already exists" });
+      }
+
+      await products.updateMany(
+        { category: current.slug },
+        { $set: { category: updates.slug, updatedAt: new Date() } },
+      );
+    }
+
     const result = await categories.findOneAndUpdate(
-      { _id: toObjectId(req.params.id) },
+      { _id },
       { $set: { ...updates, updatedAt: new Date() } },
       { returnDocument: "after" },
     );

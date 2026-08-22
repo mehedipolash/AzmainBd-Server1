@@ -9,7 +9,11 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "seed": "node scripts/seed.js",
     "make-admin": "node scripts/makeAdmin.js",
-    "set-featured": "node scripts/setFeatured.js"
+    "revoke-admin": "node scripts/revokeAdmin.js",
+    "list-admins": "node scripts/listAdmins.js",
+    "handover-admins": "node scripts/handoverAdmins.js",
+    "set-featured": "node scripts/setFeatured.js",
+    "fix-categories": "node scripts/fixOrphanCategories.js"
   },
   "keywords": [],
   "author": "",
