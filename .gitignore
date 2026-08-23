@@ -1,6 +1,9 @@
 # Dependencies
 node_modules
 
+# Deploy artifacts — never commit a build zip (can bundle secrets/node_modules).
+*.zip
+
 # Logs
 logs
 *.log
