@@ -145,4 +145,35 @@ router.patch("/:uid/role", requireAuth, requireAdmin, async (req, res, next) => 
   }
 });
 
+// DELETE /api/users/:uid — admin only.
+//
+// Removes the user's record from MongoDB. Their Firebase Auth account is a
+// separate system and is not touched here — deleting it would require the
+// Firebase Admin SDK and a service-account key, which this project
+// deliberately does without. Removing the Mongo record is what matters: on
+// their next sign-in a fresh record is created and the ADMIN_EMAILS bootstrap
+// runs again, so an account can be cleanly reset by deleting it here.
+router.delete("/:uid", requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    const { users } = getCollections();
+    const targetUid = asString(req.params.uid, "uid", { max: 128 });
+
+    // An admin deleting their own record would strip their access and could
+    // remove the last administrator — refuse it, matching the role guard above.
+    if (targetUid === req.user.uid) {
+      return res.status(400).json({ error: "You cannot delete your own account" });
+    }
+
+    const result = await users.deleteOne({ uid: targetUid });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    res.json({ uid: targetUid, deleted: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
