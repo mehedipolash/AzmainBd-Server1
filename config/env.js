@@ -31,10 +31,23 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173,ht
 
 // Emails allowed to hold the admin role. Seeded into the database on first run
 // so there is always a way in; afterwards the role lives in MongoDB.
+//
+// These are also the PROTECTED OWNERS: they are the shop's real proprietor and
+// the maintainer, the accounts the whole site is run from. An owner can never
+// be demoted or deleted from the admin panel — only by editing this server-side
+// variable — so no admin the owner adds through the UI can ever turn round and
+// lock the owner out of their own site. This is the worst-case guard: a rogue
+// or mistaken admin cannot escalate past the people who hold the server.
 const adminEmails = (process.env.ADMIN_EMAILS ?? "")
   .split(",")
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
+
+// True when the given email is one of the protected owners. Comparison is
+// lower-cased on both sides because ADMIN_EMAILS is already normalised and an
+// email from a token can arrive in any case.
+const isOwnerEmail = (email) =>
+  typeof email === "string" && adminEmails.includes(email.trim().toLowerCase());
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -97,4 +110,5 @@ module.exports = {
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
   allowedOrigins,
   adminEmails,
+  isOwnerEmail,
 };

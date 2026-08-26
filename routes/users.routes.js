@@ -2,7 +2,7 @@ const express = require("express");
 const { getCollections } = require("../config/db");
 const { requireAuth } = require("../middleware/verifyToken");
 const { requireAdmin } = require("../middleware/requireAdmin");
-const { adminEmails } = require("../config/env");
+const { adminEmails, isOwnerEmail } = require("../config/env");
 const { asString } = require("../utils/validate");
 
 const router = express.Router();
@@ -108,7 +108,17 @@ router.get("/", requireAuth, requireAdmin, async (req, res, next) => {
       .limit(200)
       .toArray();
 
-    res.json(list);
+    // Tag each row with whether it is a protected owner, so the panel can
+    // disable the change/delete controls on those rows. The owner LIST itself
+    // (the ADMIN_EMAILS value) is never sent to the browser — only this derived
+    // per-row boolean — so the real guard stays on the server and the client
+    // only learns which of the users it already sees are untouchable.
+    const tagged = list.map((account) => ({
+      ...account,
+      isOwner: isOwnerEmail(account.email),
+    }));
+
+    res.json(tagged);
   } catch (error) {
     next(error);
   }
@@ -130,6 +140,24 @@ router.patch("/:uid/role", requireAuth, requireAdmin, async (req, res, next) => 
     // the panel entirely.
     if (targetUid === req.user.uid && role !== "admin") {
       return res.status(400).json({ error: "You cannot remove your own admin access" });
+    }
+
+    // Look the target up FIRST, so a protected owner can never be demoted by
+    // anyone through the panel. The owners (ADMIN_EMAILS) are the proprietor and
+    // the maintainer; their access is controlled only by the server-side
+    // variable, never by another admin the owner happened to add. Without this,
+    // an admin the owner grants could turn round and strip the owner's access.
+    const target = await users.findOne(
+      { uid: targetUid },
+      { projection: { _id: 0, email: 1 } },
+    );
+
+    if (!target) return res.status(404).json({ error: "User not found" });
+
+    if (isOwnerEmail(target.email) && role !== "admin") {
+      return res.status(403).json({
+        error: "This is a protected owner account and cannot be changed here.",
+      });
     }
 
     const result = await users.findOneAndUpdate(
@@ -162,6 +190,24 @@ router.delete("/:uid", requireAuth, requireAdmin, async (req, res, next) => {
     // remove the last administrator — refuse it, matching the role guard above.
     if (targetUid === req.user.uid) {
       return res.status(400).json({ error: "You cannot delete your own account" });
+    }
+
+    // A protected owner (ADMIN_EMAILS) can never be deleted through the panel.
+    // Even if they could be, deleting the record would not revoke access — the
+    // owner would sign in again and the ADMIN_EMAILS bootstrap would recreate
+    // them as admin — so allowing it would only mislead. Refusing it outright
+    // keeps the owner's account the one thing no other admin can touch.
+    const target = await users.findOne(
+      { uid: targetUid },
+      { projection: { _id: 0, email: 1 } },
+    );
+
+    if (!target) return res.status(404).json({ error: "User not found" });
+
+    if (isOwnerEmail(target.email)) {
+      return res.status(403).json({
+        error: "This is a protected owner account and cannot be deleted here.",
+      });
     }
 
     const result = await users.deleteOne({ uid: targetUid });
