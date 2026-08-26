@@ -1,9 +1,13 @@
 const { MongoClient, ServerApiVersion, GridFSBucket } = require("mongodb");
-const { dbUser, dbPass, dbName } = require("./env");
+const { dbUser, dbPass, dbName, dbHost } = require("./env");
 
 // Credentials are URL-encoded — a password containing @ or / silently corrupts
 // the connection string otherwise, producing a confusing auth failure.
-const uri = `mongodb+srv://${encodeURIComponent(dbUser)}:${encodeURIComponent(dbPass)}@cluster0.azj20jt.mongodb.net/?appName=Cluster0`;
+//
+// The cluster host comes from the environment (DB_HOST), so moving to a
+// different MongoDB account — the client's own — is a config change, never a
+// code change: only .env is edited, this file stays untouched.
+const uri = `mongodb+srv://${encodeURIComponent(dbUser)}:${encodeURIComponent(dbPass)}@${dbHost}/?appName=Cluster0`;
 
 // strict:false — Stable API strict mode rejects commands outside its list,
 // including createIndex, which we need for the uniqueness guarantees below.

@@ -107,6 +107,11 @@ module.exports = {
   dbUser: process.env.DB_USER,
   dbPass: process.env.DB_PASS,
   dbName: process.env.DB_NAME ?? "AzmainBd",
+  // The MongoDB cluster host (the "cluster0.xxxxx.mongodb.net" part). Kept in
+  // the environment so switching to a different Atlas account is a .env edit,
+  // not a code edit. Falls back to the current cluster so nothing breaks if the
+  // variable is not set on an existing deployment.
+  dbHost: process.env.DB_HOST ?? "cluster0.azj20jt.mongodb.net",
   firebaseProjectId: process.env.FIREBASE_PROJECT_ID,
   allowedOrigins,
   adminEmails,
