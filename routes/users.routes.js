@@ -7,6 +7,12 @@ const { asString } = require("../utils/validate");
 
 const router = express.Router();
 
+// The most GENERAL admins allowed alongside the super admin (owner). The client
+// wants a small, controlled team: one owner plus at most this many admins, so a
+// compromised or careless promotion cannot quietly grow the set of people with
+// panel access. Enforced on the server; the panel also reflects it.
+const MAX_ADMINS = 2;
+
 /* ---------------------------------------------------------------------------
    User records.
 
@@ -23,13 +29,22 @@ router.post("/sync", requireAuth, async (req, res, next) => {
     const { users } = getCollections();
     const { uid, email, name, picture, emailVerified } = req.user;
 
-    const existing = await users.findOne({ uid });
+    // Match on uid first. If that misses, fall back to the EMAIL: the same
+    // person signing in through a fresh Firebase project gets a new uid, and
+    // the record migrated from the old project (or created before) still keys
+    // on the old uid. Matching by email and re-pointing it at the new uid is
+    // what stops a second, duplicate document being created for one person —
+    // which is exactly how two "azmainbdweb" rows appeared after the move.
+    const existing =
+      (await users.findOne({ uid })) ||
+      (email ? await users.findOne({ email: email.toLowerCase() }) : null);
 
     if (existing) {
       await users.updateOne(
-        { uid },
+        { _id: existing._id },
         {
           $set: {
+            uid, // adopt the current uid, so future lookups match on it directly
             email,
             emailVerified,
             displayName: name ?? existing.displayName ?? null,
@@ -120,7 +135,14 @@ router.get("/", requireAuth, requireAdmin, async (req, res, next) => {
       isOwner: isSuperAdminEmail(account.email),
     }));
 
-    res.json({ users: tagged, callerRole: req.user.role });
+    const adminCount = tagged.filter((a) => a.role === "admin").length;
+
+    res.json({
+      users: tagged,
+      callerRole: req.user.role,
+      adminCount,
+      maxAdmins: MAX_ADMINS,
+    });
   } catch (error) {
     next(error);
   }
@@ -160,6 +182,19 @@ router.patch("/:uid/role", requireAuth, requireSuperAdmin, async (req, res, next
       return res.status(403).json({
         error: "This is a protected owner account and cannot be changed here.",
       });
+    }
+
+    // Cap the number of general admins. Only relevant when PROMOTING someone who
+    // is not already an admin — a demotion or a no-op never trips it. Super
+    // admins are counted separately (role "admin" only), so the owner never eats
+    // into the admin budget.
+    if (role === "admin" && target.role !== "admin") {
+      const adminCount = await users.countDocuments({ role: "admin" });
+      if (adminCount >= MAX_ADMINS) {
+        return res.status(400).json({
+          error: `You can have at most ${MAX_ADMINS} admins. Remove one before adding another.`,
+        });
+      }
     }
 
     const result = await users.findOneAndUpdate(

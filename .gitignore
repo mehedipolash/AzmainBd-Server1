@@ -18,6 +18,9 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
+# One-off migration secret (old cluster URI) — never commit; delete after use.
+.migrate-source.txt
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

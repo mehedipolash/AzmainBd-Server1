@@ -48,7 +48,11 @@ const connectDb = async () => {
   // concurrent requests cannot create duplicate users or category slugs.
   await Promise.all([
     collections.users.createIndex({ uid: 1 }, { unique: true }),
-    collections.users.createIndex({ email: 1 }),
+    // Unique on email too, so one person can never end up with two records —
+    // the sync route matches on email to adopt a new uid, and this backstops
+    // it at the database level. sparse: a user with no email (rare) is skipped
+    // rather than colliding with every other null.
+    collections.users.createIndex({ email: 1 }, { unique: true, sparse: true }),
     collections.categories.createIndex({ slug: 1 }, { unique: true }),
     collections.products.createIndex({ category: 1 }),
     collections.products.createIndex({ createdAt: -1 }),

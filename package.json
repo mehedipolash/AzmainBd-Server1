@@ -9,6 +9,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "seed": "node scripts/seed.js",
     "make-admin": "node scripts/makeAdmin.js",
+    "sync-roles": "node scripts/syncRoles.js",
+    "migrate-data": "node scripts/migrateData.js",
     "revoke-admin": "node scripts/revokeAdmin.js",
     "list-admins": "node scripts/listAdmins.js",
     "handover-admins": "node scripts/handoverAdmins.js",
