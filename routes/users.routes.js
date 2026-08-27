@@ -1,8 +1,8 @@
 const express = require("express");
 const { getCollections } = require("../config/db");
 const { requireAuth } = require("../middleware/verifyToken");
-const { requireAdmin } = require("../middleware/requireAdmin");
-const { adminEmails, isOwnerEmail } = require("../config/env");
+const { requireAdmin, requireSuperAdmin } = require("../middleware/requireAdmin");
+const { bootstrapRoleFor, isSuperAdminEmail } = require("../config/env");
 const { asString } = require("../utils/validate");
 
 const router = express.Router();
@@ -47,10 +47,11 @@ router.post("/sync", requireAuth, async (req, res, next) => {
       });
     }
 
-    // Bootstrap: emails listed in ADMIN_EMAILS become admins on first sign-in.
-    // This is the only path that grants the role without an existing admin,
-    // and it is controlled by a server-side environment variable.
-    const role = email && adminEmails.includes(email.toLowerCase()) ? "admin" : "customer";
+    // Bootstrap: the role an email gets on its FIRST sign-in. SUPER_ADMIN_EMAILS
+    // → superadmin, ADMIN_EMAILS → admin, everyone else → customer. This is the
+    // only path that grants a privileged role without an existing super admin,
+    // and it is controlled entirely by server-side environment variables.
+    const role = bootstrapRoleFor(email);
 
     const doc = {
       uid,
@@ -98,7 +99,8 @@ router.get("/me", requireAuth, async (req, res, next) => {
   }
 });
 
-// GET /api/users — admin only.
+// GET /api/users — any admin may READ the list (a general admin sees it too),
+// but only a super admin may act on it (the PATCH/DELETE routes enforce that).
 router.get("/", requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const { users } = getCollections();
@@ -108,53 +110,53 @@ router.get("/", requireAuth, requireAdmin, async (req, res, next) => {
       .limit(200)
       .toArray();
 
-    // Tag each row with whether it is a protected owner, so the panel can
-    // disable the change/delete controls on those rows. The owner LIST itself
-    // (the ADMIN_EMAILS value) is never sent to the browser — only this derived
-    // per-row boolean — so the real guard stays on the server and the client
-    // only learns which of the users it already sees are untouchable.
+    // Tag each row with whether it is a protected super admin (owner), so the
+    // panel can lock its controls. The owner LIST itself is never sent to the
+    // browser — only this derived per-row boolean. callerRole tells the panel
+    // whether the viewer may act at all, so a general admin gets a read-only view
+    // without the client having to know the rule.
     const tagged = list.map((account) => ({
       ...account,
-      isOwner: isOwnerEmail(account.email),
+      isOwner: isSuperAdminEmail(account.email),
     }));
 
-    res.json(tagged);
+    res.json({ users: tagged, callerRole: req.user.role });
   } catch (error) {
     next(error);
   }
 });
 
-// PATCH /api/users/:uid/role — admin only.
-router.patch("/:uid/role", requireAuth, requireAdmin, async (req, res, next) => {
+// PATCH /api/users/:uid/role — SUPER ADMIN ONLY. A general admin cannot change
+// anyone's role, so an admin can never create another admin.
+router.patch("/:uid/role", requireAuth, requireSuperAdmin, async (req, res, next) => {
   try {
     const { users } = getCollections();
     const role = asString(req.body.role, "role", { max: 20 });
 
+    // A super admin can grant "admin" or reduce to "customer". They cannot mint
+    // another super admin from the panel — that rank is set only by the
+    // server-side variable, so the top of the hierarchy stays off-limits to the UI.
     if (!["admin", "customer"].includes(role)) {
       return res.status(400).json({ error: "Role must be admin or customer" });
     }
 
     const targetUid = asString(req.params.uid, "uid", { max: 128 });
 
-    // An admin demoting themselves could lock the last administrator out of
-    // the panel entirely.
-    if (targetUid === req.user.uid && role !== "admin") {
-      return res.status(400).json({ error: "You cannot remove your own admin access" });
+    if (targetUid === req.user.uid) {
+      return res.status(400).json({ error: "You cannot change your own role" });
     }
 
-    // Look the target up FIRST, so a protected owner can never be demoted by
-    // anyone through the panel. The owners (ADMIN_EMAILS) are the proprietor and
-    // the maintainer; their access is controlled only by the server-side
-    // variable, never by another admin the owner happened to add. Without this,
-    // an admin the owner grants could turn round and strip the owner's access.
     const target = await users.findOne(
       { uid: targetUid },
-      { projection: { _id: 0, email: 1 } },
+      { projection: { _id: 0, email: 1, role: 1 } },
     );
 
     if (!target) return res.status(404).json({ error: "User not found" });
 
-    if (isOwnerEmail(target.email) && role !== "admin") {
+    // A super admin (owner) can never be demoted through the panel — not even by
+    // another super admin. Their rank is controlled only by SUPER_ADMIN_EMAILS,
+    // so no UI action can strip the owner's power.
+    if (isSuperAdminEmail(target.email) || target.role === "superadmin") {
       return res.status(403).json({
         error: "This is a protected owner account and cannot be changed here.",
       });
@@ -173,38 +175,35 @@ router.patch("/:uid/role", requireAuth, requireAdmin, async (req, res, next) => 
   }
 });
 
-// DELETE /api/users/:uid — admin only.
+// DELETE /api/users/:uid — SUPER ADMIN ONLY.
 //
 // Removes the user's record from MongoDB. Their Firebase Auth account is a
 // separate system and is not touched here — deleting it would require the
 // Firebase Admin SDK and a service-account key, which this project
 // deliberately does without. Removing the Mongo record is what matters: on
-// their next sign-in a fresh record is created and the ADMIN_EMAILS bootstrap
-// runs again, so an account can be cleanly reset by deleting it here.
-router.delete("/:uid", requireAuth, requireAdmin, async (req, res, next) => {
+// their next sign-in a fresh record is created and the bootstrap runs again,
+// so an account can be cleanly reset by deleting it here.
+router.delete("/:uid", requireAuth, requireSuperAdmin, async (req, res, next) => {
   try {
     const { users } = getCollections();
     const targetUid = asString(req.params.uid, "uid", { max: 128 });
 
-    // An admin deleting their own record would strip their access and could
-    // remove the last administrator — refuse it, matching the role guard above.
     if (targetUid === req.user.uid) {
       return res.status(400).json({ error: "You cannot delete your own account" });
     }
 
-    // A protected owner (ADMIN_EMAILS) can never be deleted through the panel.
-    // Even if they could be, deleting the record would not revoke access — the
-    // owner would sign in again and the ADMIN_EMAILS bootstrap would recreate
-    // them as admin — so allowing it would only mislead. Refusing it outright
-    // keeps the owner's account the one thing no other admin can touch.
+    // A super admin (owner) can never be deleted through the panel. Even if they
+    // could be, deleting the record would not revoke access — they would sign in
+    // again and the bootstrap would recreate them as super admin — so allowing it
+    // would only mislead. Refusing outright keeps the owner untouchable.
     const target = await users.findOne(
       { uid: targetUid },
-      { projection: { _id: 0, email: 1 } },
+      { projection: { _id: 0, email: 1, role: 1 } },
     );
 
     if (!target) return res.status(404).json({ error: "User not found" });
 
-    if (isOwnerEmail(target.email)) {
+    if (isSuperAdminEmail(target.email) || target.role === "superadmin") {
       return res.status(403).json({
         error: "This is a protected owner account and cannot be deleted here.",
       });
