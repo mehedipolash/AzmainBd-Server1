@@ -90,6 +90,12 @@ app.get("/health", async (req, res) => {
 
 app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
+// Mounted at /api/accounts, NOT /api/users: the shared host's firewall blocks
+// any path containing "/users" (bots probe it), which was serving its bot-check
+// HTML page instead of our JSON — so sign-in could never read a role and the
+// admin panel never appeared. "accounts" is the same routes under a name the
+// firewall leaves alone. Kept /api/users too so any stale client still resolves.
+app.use("/api/accounts", userRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/images", imageRoutes);
 app.use("/api/sales", salesRoutes);
